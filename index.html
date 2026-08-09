@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F7EFC6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Notebook</title>
+<style>
+  :root{
+    --paper: #F7EFC6;
+    --rule: #9FB9D9;
+    --margin: #C0392B;
+    --ink: #2A2A28;
+    --ink-soft: #6b6a5f;
+    --accent: #C0392B;
+    --highlight: #FCE38A;
+    --card-shadow: rgba(42,42,40,0.18);
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    font-family: 'Courier New', ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--paper);
+    background-image: linear-gradient(var(--paper) 0px, var(--paper) 27px, var(--rule) 28px);
+    background-size: 100% 28px;
+    color: var(--ink);
+    min-height: 100vh;
+    position: relative;
+  }
+  body::before{
+    content:"";
+    position: fixed; top:0; bottom:0; left: 34px; width: 2px;
+    background: var(--margin); opacity: 0.55; pointer-events: none; z-index: 0;
+  }
+  header{
+    position: sticky; top:0; z-index: 5;
+    background: var(--paper);
+    padding: 16px 16px 10px 46px;
+    border-bottom: 1px dashed rgba(42,42,40,0.3);
+  }
+  h1{
+    margin:0 0 12px 0; font-size: 22px; letter-spacing: 1px;
+    text-transform: uppercase; font-weight: 700;
+    display:flex; justify-content: space-between; align-items:center; gap:8px;
+  }
+  h1 .dot{ color: var(--accent); }
+  h1 .right{ display:flex; gap:6px; }
+  h1 .smallBtn{
+    font-size: 11px; letter-spacing: 0.5px; text-transform: none;
+    font-weight:700; color: var(--ink-soft); background:none; border: 1px solid rgba(42,42,40,0.3);
+    border-radius: 5px; padding: 6px 8px; cursor:pointer; font-family: inherit;
+  }
+  .syncStatus{ font-size: 11px; color: var(--ink-soft); margin-bottom: 8px; display:flex; align-items:center; gap:6px; }
+  .syncDot{ width:7px; height:7px; border-radius:50%; background:#4a9; flex-shrink:0; }
+  .syncDot.offline{ background:#c0392b; }
+  .searchWrap{
+    display:flex; align-items:center; gap:8px;
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(42,42,40,0.35);
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;
+  }
+  .searchWrap input{
+    border:none; background: transparent; outline:none;
+    font-family: inherit; font-size: 15px; flex:1; color: var(--ink);
+  }
+  .searchWrap svg{ flex-shrink:0; opacity:0.6; }
+  .tabs{ display:flex; gap:6px; overflow-x:auto; padding-bottom: 2px; }
+  .tab{
+    font-family: inherit; font-size: 12px; font-weight:700;
+    border: 1px solid rgba(42,42,40,0.35); background: rgba(255,255,255,0.4);
+    border-radius: 999px; padding: 6px 12px; white-space: nowrap; cursor:pointer;
+    color: var(--ink-soft);
+  }
+  .tab.active{ background: var(--accent); border-color: var(--accent); color:#fff; }
+  main{ padding: 12px 16px 100px 46px; position: relative; z-index: 1; }
+  .empty{ margin-top: 60px; text-align:center; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
+  .note{
+    background: rgba(255,255,255,0.5);
+    border: 1px solid rgba(42,42,40,0.25);
+    border-left: 3px solid var(--margin);
+    border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; cursor: pointer;
+    box-shadow: 0 2px 0 var(--card-shadow);
+    display:flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  }
+  .note:active{ transform: translateY(1px); }
+  .note .body{ min-width:0; flex:1; }
+  .note .title{ font-weight:700; font-size:15px; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+  .note .snippet{ font-size:13px; color: var(--ink-soft); white-space: nowrap; overflow:hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .note .meta{ font-size:11px; color: var(--ink-soft); margin-top:4px; letter-spacing: 0.3px; display:flex; gap:8px; align-items:center; }
+  .note .meta .tag{ background: rgba(42,42,40,0.08); border-radius: 999px; padding: 1px 8px; }
+  .note mark{ background: var(--highlight); color: inherit; padding:0 1px; }
+  .note .del{ border:none; background:none; color: var(--ink-soft); font-size: 18px; line-height:1; padding: 4px 6px; cursor:pointer; }
+  .fab{
+    position: fixed; right: 20px; bottom: 24px; width: 56px; height: 56px; border-radius: 50%;
+    background: var(--accent); color: #fff; border:none; font-size: 28px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 6; cursor:pointer;
+  }
+  .editorOverlay{
+    position: fixed; inset:0; background: var(--paper);
+    background-image: linear-gradient(var(--paper) 0px, var(--paper) 27px, var(--rule) 28px);
+    background-size: 100% 28px; z-index: 20; display:flex; flex-direction: column;
+    transform: translateY(100%); transition: transform 0.22s ease;
+  }
+  .editorOverlay.open{ transform: translateY(0); }
+  .editorOverlay::before{ content:""; position:absolute; top:0; bottom:0; left:34px; width:2px; background: var(--margin); opacity:0.55; }
+  .editorBar{
+    display:flex; align-items:center; justify-content: space-between; padding: 14px 16px;
+    border-bottom: 1px dashed rgba(42,42,40,0.3); position: relative; z-index:1; background: var(--paper);
+  }
+  .editorBar button{ border:none; background:none; font-family: inherit; font-size: 15px; font-weight: 700; color: var(--accent); padding: 6px 4px; cursor:pointer; }
+  .editorBar .status{ font-size: 12px; color: var(--ink-soft); }
+  .folderPicker{ display:flex; gap:6px; padding: 0 16px 10px 46px; position:relative; z-index:1; background: var(--paper); }
+  .folderPicker button{
+    font-family: inherit; font-size: 12px; font-weight:700;
+    border: 1px solid rgba(42,42,40,0.35); background: rgba(255,255,255,0.4);
+    border-radius: 999px; padding: 6px 12px; cursor:pointer; color: var(--ink-soft);
+  }
+  .folderPicker button.active{ background: var(--accent); border-color: var(--accent); color:#fff; }
+  textarea{
+    flex:1; border:none; outline:none; resize:none; background: transparent;
+    font-family: inherit; font-size: 16px; line-height: 28px; color: var(--ink);
+    padding: 0 16px 24px 46px; position: relative; z-index: 1;
+  }
+  ::selection{ background: var(--highlight); }
+  #importFile{ display:none; }
+  .toast{
+    position: fixed; left:50%; bottom: 90px; transform: translateX(-50%);
+    background: var(--ink); color: var(--paper); font-size: 13px; padding: 8px 14px;
+    border-radius: 6px; z-index: 30; opacity:0; pointer-events:none; transition: opacity 0.2s ease;
+  }
+  .toast.show{ opacity: 0.95; }
+
+  /* Auth screen */
+  .authScreen{
+    position: fixed; inset:0; z-index: 50; background: var(--paper);
+    display:flex; align-items:center; justify-content:center; padding: 24px;
+  }
+  .authBox{ width: 100%; max-width: 340px; }
+  .authBox h2{ font-size: 20px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px 0; }
+  .authBox p.sub{ color: var(--ink-soft); font-size: 13px; margin: 0 0 20px 0; }
+  .authBox input{
+    width:100%; font-family: inherit; font-size: 15px; padding: 12px;
+    border: 1px solid rgba(42,42,40,0.35); border-radius: 6px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.6); outline:none;
+  }
+  .authBox .authBtn{
+    width:100%; font-family: inherit; font-size: 15px; font-weight:700; padding: 12px;
+    border:none; border-radius: 6px; background: var(--accent); color:#fff; cursor:pointer; margin-bottom: 10px;
+  }
+  .authBox .switchMode{
+    background:none; border:none; font-family: inherit; font-size: 13px; color: var(--ink-soft);
+    text-decoration: underline; cursor:pointer; padding:0; display:block; margin: 0 auto;
+  }
+  .authBox .authError{ color: var(--accent); font-size: 13px; margin-bottom: 10px; min-height: 16px; }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="authScreen" id="authScreen">
+  <div class="authBox">
+    <h2>Notebook<span style="color:var(--accent)">.</span></h2>
+    <p class="sub" id="authSub">Sign in to sync your notes across devices.</p>
+    <div class="authError" id="authError"></div>
+    <input type="email" id="authEmail" placeholder="Email" autocomplete="username">
+    <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+    <button class="authBtn" id="authSubmit">Sign in</button>
+    <button class="switchMode" id="authSwitch">New here? Create an account</button>
+  </div>
+</div>
+
+<div id="appRoot" class="hidden">
+  <header>
+    <h1>Notebook<span class="dot">.</span>
+      <span class="right">
+        <button class="smallBtn" id="backupBtn">Backup</button>
+        <button class="smallBtn" id="signOutBtn">Sign out</button>
+      </span>
+    </h1>
+    <div class="syncStatus"><span class="syncDot" id="syncDot"></span><span id="syncText">Synced</span></div>
+    <div class="searchWrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search" type="text" placeholder="Search notes…" autocomplete="off" />
+    </div>
+    <div class="tabs" id="tabs"></div>
+  </header>
+
+  <main id="list"></main>
+
+  <button class="fab" id="newBtn" aria-label="New note">+</button>
+
+  <div class="editorOverlay" id="editor">
+    <div class="editorBar">
+      <button id="backBtn">‹ Back</button>
+      <span class="status" id="status"></span>
+      <button id="deleteBtn">Delete</button>
+    </div>
+    <div class="folderPicker" id="folderPicker"></div>
+    <textarea id="textarea" placeholder="Start writing…"></textarea>
+  </div>
+
+  <input type="file" id="importFile" accept="application/json">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, addDoc,
+  serverTimestamp, getDocs, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCciYKqJAUlgTh2-8I4UsbvtEeXVlPoFIo",
+  authDomain: "notes-android-a227b.firebaseapp.com",
+  projectId: "notes-android-a227b",
+  storageBucket: "notes-android-a227b.firebasestorage.app",
+  messagingSenderId: "798177259852",
+  appId: "1:798177259852:web:f07275d6376ee438cddfe9"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+
+let uid = null;
+let notes = [];
+let folders = { f1: 'Folder 1', f2: 'Folder 2' };
+let activeId = null;
+let activeTab = 'all';
+let saveTimer = null;
+let unsubNotes = null;
+let unsubFolders = null;
+let authMode = 'signin';
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+}
+function firstLine(text){ var t = (text || '').split('\n')[0].trim(); return t || 'Untitled note'; }
+function snippet(text){ var lines = (text || '').split('\n').slice(1).join(' ').trim(); return lines.slice(0, 90); }
+function fmtDate(ts){
+  if(!ts) return '';
+  var d = new Date(ts); var now = new Date();
+  var sameDay = d.toDateString() === now.toDateString();
+  var opts = sameDay ? {hour:'2-digit', minute:'2-digit'} : {day:'numeric', month:'short'};
+  return d.toLocaleString(undefined, opts);
+}
+function highlight(text, q){
+  var esc = escapeHtml(text);
+  if(!q) return esc;
+  var escQ = escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return esc.replace(new RegExp('(' + escQ + ')', 'ig'), '<mark>$1</mark>');
+}
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+}
+
+// ---------- Auth screen wiring ----------
+const authScreen = document.getElementById('authScreen');
+const appRoot = document.getElementById('appRoot');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authError = document.getElementById('authError');
+const authSub = document.getElementById('authSub');
+const authSubmit = document.getElementById('authSubmit');
+const authSwitch = document.getElementById('authSwitch');
+
+authSwitch.addEventListener('click', function(){
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  authError.textContent = '';
+  if(authMode === 'signup'){
+    authSub.textContent = 'Create an account to start syncing.';
+    authSubmit.textContent = 'Create account';
+    authSwitch.textContent = 'Already have an account? Sign in';
+  } else {
+    authSub.textContent = 'Sign in to sync your notes across devices.';
+    authSubmit.textContent = 'Sign in';
+    authSwitch.textContent = "New here? Create an account";
+  }
+});
+
+authSubmit.addEventListener('click', function(){
+  var email = authEmail.value.trim();
+  var pw = authPassword.value;
+  authError.textContent = '';
+  if(!email || !pw){ authError.textContent = 'Enter an email and password.'; return; }
+  var action = authMode === 'signup' ? createUserWithEmailAndPassword : signInWithEmailAndPassword;
+  action(auth, email, pw).catch(function(err){
+    authError.textContent = friendlyAuthError(err.code);
+  });
+});
+
+function friendlyAuthError(code){
+  var map = {
+    'auth/invalid-email': 'That email address looks invalid.',
+    'auth/user-not-found': 'No account with that email — try "Create an account".',
+    'auth/wrong-password': 'Wrong password.',
+    'auth/invalid-credential': 'Email or password is incorrect.',
+    'auth/email-already-in-use': 'An account already exists — try signing in instead.',
+    'auth/weak-password': 'Password should be at least 6 characters.',
+    'auth/network-request-failed': 'No internet connection right now.'
+  };
+  return map[code] || 'Something went wrong. Try again.';
+}
+
+document.getElementById('signOutBtn').addEventListener('click', function(){
+  signOut(auth);
+});
+
+onAuthStateChanged(auth, function(user){
+  if(user){
+    uid = user.uid;
+    authScreen.classList.add('hidden');
+    appRoot.classList.remove('hidden');
+    subscribeToData();
+  } else {
+    uid = null;
+    if(unsubNotes) unsubNotes();
+    if(unsubFolders) unsubFolders();
+    appRoot.classList.add('hidden');
+    authScreen.classList.remove('hidden');
+  }
+});
+
+// ---------- Online/offline indicator ----------
+function updateSyncStatus(){
+  var dot = document.getElementById('syncDot');
+  var text = document.getElementById('syncText');
+  if(navigator.onLine){ dot.classList.remove('offline'); text.textContent = 'Synced'; }
+  else { dot.classList.add('offline'); text.textContent = 'Offline — will sync when back online'; }
+}
+window.addEventListener('online', updateSyncStatus);
+window.addEventListener('offline', updateSyncStatus);
+
+// ---------- Firestore data ----------
+function notesCol(){ return collection(db, 'users', uid, 'notes'); }
+function foldersDoc(){ return doc(db, 'users', uid, 'meta', 'folders'); }
+
+function subscribeToData(){
+  updateSyncStatus();
+  unsubNotes = onSnapshot(notesCol(), function(snap){
+    notes = snap.docs.map(function(d){
+      var data = d.data();
+      return { id: d.id, text: data.text || '', folder: data.folder || null, updatedAt: data.updatedAt || 0 };
+    });
+    renderTabs(); render();
+    if(activeId){
+      var current = notes.find(function(n){ return n.id === activeId; });
+      if(current) renderFolderPicker(current);
+    }
+  }, function(){ updateSyncStatus(); });
+
+  unsubFolders = onSnapshot(foldersDoc(), function(snap){
+    if(snap.exists()) folders = Object.assign({f1:'Folder 1', f2:'Folder 2'}, snap.data());
+    renderTabs();
+  }, function(){});
+}
+
+function renderTabs(){
+  var tabs = document.getElementById('tabs');
+  var defs = [
+    {id:'all', label:'All'},
+    {id:'f1', label: folders.f1},
+    {id:'f2', label: folders.f2},
+    {id:'none', label:'Unfiled'}
+  ];
+  tabs.innerHTML = defs.map(function(t){
+    return '<button class="tab' + (activeTab===t.id?' active':'') + '" data-tab="' + t.id + '">' + escapeHtml(t.label) + '</button>';
+  }).join('');
+}
+
+function render(){
+  var q = document.getElementById('search').value.trim();
+  var list = document.getElementById('list');
+  var filtered = notes
+    .filter(function(n){ return !q || (n.text || '').toLowerCase().indexOf(q.toLowerCase()) !== -1; })
+    .filter(function(n){
+      if(activeTab === 'all') return true;
+      if(activeTab === 'none') return !n.folder;
+      return n.folder === activeTab;
+    })
+    .sort(function(a,b){ return (b.updatedAt||0) - (a.updatedAt||0); });
+
+  if(filtered.length === 0){
+    list.innerHTML = '<div class="empty">' + (q
+      ? 'No notes match "' + escapeHtml(q) + '".'
+      : 'No notes here yet.<br>Tap + to write one.') + '</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(function(n){
+    var title = highlight(firstLine(n.text), q);
+    var snip = highlight(snippet(n.text), q);
+    var tagLabel = n.folder ? folders[n.folder] : null;
+    return '' +
+      '<div class="note" data-id="' + n.id + '">' +
+        '<div class="body">' +
+          '<div class="title">' + title + '</div>' +
+          (snip ? '<div class="snippet">' + snip + '</div>' : '') +
+          '<div class="meta"><span>' + fmtDate(n.updatedAt) + '</span>' + (tagLabel ? '<span class="tag">' + escapeHtml(tagLabel) + '</span>' : '') + '</div>' +
+        '</div>' +
+        '<button class="del" data-id="' + n.id + '" aria-label="Delete note">×</button>' +
+      '</div>';
+  }).join('');
+}
+
+function renderFolderPicker(note){
+  var wrap = document.getElementById('folderPicker');
+  var opts = [{id:null,label:'None'},{id:'f1',label:folders.f1},{id:'f2',label:folders.f2}];
+  wrap.innerHTML = opts.map(function(o){
+    var active = (note.folder || null) === o.id;
+    return '<button data-folder="' + (o.id||'') + '" class="' + (active?'active':'') + '">' + escapeHtml(o.label) + '</button>';
+  }).join('');
+}
+
+function openEditor(id){
+  activeId = id;
+  var note = notes.find(function(n){ return n.id === id; });
+  document.getElementById('textarea').value = note ? note.text : '';
+  document.getElementById('status').textContent = '';
+  renderFolderPicker(note || {folder:null});
+  document.getElementById('editor').classList.add('open');
+  setTimeout(function(){ document.getElementById('textarea').focus(); }, 200);
+}
+function closeEditor(){ document.getElementById('editor').classList.remove('open'); activeId = null; render(); }
+
+async function newNote(){
+  var folder = (activeTab === 'f1' || activeTab === 'f2') ? activeTab : null;
+  var ref = await addDoc(notesCol(), { text: '', folder: folder, updatedAt: Date.now() });
+  openEditor(ref.id);
+}
+
+function scheduleSave(){
+  var status = document.getElementById('status');
+  status.textContent = 'Saving…';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async function(){
+    if(!activeId) return;
+    var text = document.getElementById('textarea').value;
+    var now = Date.now();
+    await updateDoc(doc(db, 'users', uid, 'notes', activeId), { text: text, updatedAt: now });
+    status.textContent = 'Saved ' + fmtDate(now);
+  }, 400);
+}
+
+async function deleteActive(){
+  if(!activeId) return;
+  await deleteDoc(doc(db, 'users', uid, 'notes', activeId));
+  closeEditor();
+}
+
+async function flushAndMaybeDeleteEmpty(){
+  if(!activeId) return;
+  var text = document.getElementById('textarea').value;
+  if(text.trim() === ''){
+    await deleteDoc(doc(db, 'users', uid, 'notes', activeId)).catch(function(){});
+  } else {
+    await updateDoc(doc(db, 'users', uid, 'notes', activeId), { text: text, updatedAt: Date.now() }).catch(function(){});
+  }
+}
+
+function exportBackup(){
+  var data = { notes: notes, folders: folders, exportedAt: new Date().toISOString() };
+  var blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = 'notebook-backup-' + stamp + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Backup file downloaded');
+}
+
+async function importBackup(file){
+  var reader = new FileReader();
+  reader.onload = async function(){
+    try{
+      var data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.notes)) throw new Error('bad file');
+      if(!confirm('Replace all current notes with this backup? This cannot be undone.')) return;
+      var existing = await getDocs(notesCol());
+      var batch1 = writeBatch(db);
+      existing.docs.forEach(function(d){ batch1.delete(d.ref); });
+      await batch1.commit();
+      var batch2 = writeBatch(db);
+      data.notes.forEach(function(n){
+        var ref = doc(notesCol());
+        batch2.set(ref, { text: n.text || '', folder: n.folder || null, updatedAt: n.updatedAt || Date.now() });
+      });
+      await batch2.commit();
+      if(data.folders) await setDoc(foldersDoc(), data.folders);
+      toast('Backup restored');
+    }catch(e){ toast('Could not read that file'); }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('newBtn').addEventListener('click', newNote);
+document.getElementById('backBtn').addEventListener('click', async function(){
+  await flushAndMaybeDeleteEmpty();
+  closeEditor();
+});
+document.getElementById('deleteBtn').addEventListener('click', deleteActive);
+document.getElementById('textarea').addEventListener('input', scheduleSave);
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('backupBtn').addEventListener('click', function(){
+  var choice = confirm('Tap OK to export a backup file, or Cancel to import one instead.');
+  if(choice) exportBackup(); else document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', function(e){
+  if(e.target.files[0]) importBackup(e.target.files[0]);
+  e.target.value = '';
+});
+
+document.getElementById('folderPicker').addEventListener('click', async function(e){
+  var btn = e.target.closest('button');
+  if(!btn) return;
+  var folderVal = btn.getAttribute('data-folder') || null;
+  if(!activeId) return;
+  await updateDoc(doc(db, 'users', uid, 'notes', activeId), { folder: folderVal, updatedAt: Date.now() });
+});
+
+document.getElementById('tabs').addEventListener('click', async function(e){
+  var btn = e.target.closest('.tab');
+  if(!btn) return;
+  var id = btn.getAttribute('data-tab');
+  if((id === 'f1' || id === 'f2') && activeTab === id){
+    var current = folders[id];
+    var name = prompt('Rename folder', current);
+    if(name && name.trim()){
+      var updated = Object.assign({}, folders);
+      updated[id] = name.trim();
+      await setDoc(foldersDoc(), updated);
+    }
+  }
+  activeTab = id;
+  renderTabs(); render();
+});
+
+document.getElementById('list').addEventListener('click', async function(e){
+  var delBtn = e.target.closest('.del');
+  if(delBtn){
+    e.stopPropagation();
+    await deleteDoc(doc(db, 'users', uid, 'notes', delBtn.getAttribute('data-id')));
+    return;
+  }
+  var card = e.target.closest('.note');
+  if(card){ openEditor(card.getAttribute('data-id')); }
+});
+</script>
+</body>
+</html>
