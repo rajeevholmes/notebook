@@ -122,6 +122,16 @@
     border-radius: 999px; padding: 6px 12px; cursor:pointer; color: var(--ink-soft);
   }
   .folderPicker button.active{ background: var(--accent); border-color: var(--accent); color:#fff; }
+  .matchBar{
+    display:flex; align-items:center; justify-content:center; gap:14px;
+    padding: 6px 16px 8px 46px; position:relative; z-index:1; background: var(--paper);
+    font-size: 12px; color: var(--ink-soft);
+  }
+  .matchBar button{
+    font-family: inherit; font-size: 12px; font-weight:700; color: var(--accent);
+    background: rgba(255,255,255,0.5); border: 1px solid rgba(42,42,40,0.3);
+    border-radius: 999px; padding: 4px 10px; cursor:pointer;
+  }
   textarea{
     flex:1; border:none; outline:none; resize:none; background: transparent;
     font-family: inherit; font-size: 16px; line-height: 28px; color: var(--ink);
@@ -202,6 +212,11 @@
       <button id="deleteBtn">Delete</button>
     </div>
     <div class="folderPicker" id="folderPicker"></div>
+    <div class="matchBar hidden" id="matchBar">
+      <button id="prevMatch">‹ Prev</button>
+      <span id="matchCount"></span>
+      <button id="nextMatch">Next ›</button>
+    </div>
     <textarea id="textarea" placeholder="Start writing…"></textarea>
   </div>
 
@@ -247,6 +262,9 @@ let folders = { f1: 'Folder 1', f2: 'Folder 2' };
 let activeId = null;
 let activeTab = 'all';
 let saveTimer = null;
+let currentMatches = [];
+let currentMatchPos = 0;
+let currentMatchLen = 0;
 let unsubNotes = null;
 let unsubFolders = null;
 let authMode = 'signin';
@@ -256,6 +274,45 @@ function escapeHtml(s){
 }
 function firstLine(text){ var t = (text || '').split('\n')[0].trim(); return t || 'Untitled note'; }
 function snippet(text){ var lines = (text || '').split('\n').slice(1).join(' ').trim(); return lines.slice(0, 90); }
+// Returns up to 4 individual lines (after the title line) that contain the query,
+// each on its own row, capped in length. Falls back to a plain snippet when there's no query.
+function matchingLines(text, q){
+  var lines = (text || '').split('\n');
+  if(!q){
+    var plain = snippet(text);
+    return plain ? [plain] : [];
+  }
+  var ql = q.toLowerCase();
+  var hits = [];
+  for(var i = 1; i < lines.length && hits.length < 6; i++){
+    var trimmed = lines[i].trim();
+    if(trimmed && trimmed.toLowerCase().indexOf(ql) !== -1){
+      hits.push(trimmed.length > 140 ? trimmed.slice(0, 140) + '…' : trimmed);
+    }
+  }
+  // also check the title line for a match so a hit there doesn't leave the list empty
+  if(hits.length === 0 && lines[0] && lines[0].toLowerCase().indexOf(ql) === -1){
+    // title didn't match and no body line matched via this path — nothing to add
+  }
+  return hits;
+}
+function firstMatchIndex(text, q){
+  if(!q) return -1;
+  return (text || '').toLowerCase().indexOf(q.toLowerCase());
+}
+// Returns the start index of every occurrence of q within text (case-insensitive).
+function allMatchIndices(text, q){
+  var out = [];
+  if(!q) return out;
+  var hay = (text || '').toLowerCase();
+  var needle = q.toLowerCase();
+  var from = 0, idx;
+  while((idx = hay.indexOf(needle, from)) !== -1){
+    out.push(idx);
+    from = idx + needle.length;
+  }
+  return out;
+}
 function fmtDate(ts){
   if(!ts) return '';
   var d = new Date(ts); var now = new Date();
@@ -411,13 +468,14 @@ function render(){
 
   list.innerHTML = filtered.map(function(n){
     var title = highlight(firstLine(n.text), q);
-    var snip = highlight(snippet(n.text), q);
+    var lines = matchingLines(n.text, q);
+    var snipHtml = lines.map(function(l){ return '<div class="snippet">' + highlight(l, q) + '</div>'; }).join('');
     var tagLabel = n.folder ? folders[n.folder] : null;
     return '' +
-      '<div class="note" data-id="' + n.id + '">' +
+      '<div class="note" data-id="' + n.id + '" data-query="' + escapeHtml(q) + '">' +
         '<div class="body">' +
           '<div class="title">' + title + '</div>' +
-          (snip ? '<div class="snippet">' + snip + '</div>' : '') +
+          snipHtml +
           '<div class="meta"><span>' + fmtDate(n.updatedAt) + '</span>' + (tagLabel ? '<span class="tag">' + escapeHtml(tagLabel) + '</span>' : '') + '</div>' +
         '</div>' +
         '<button class="del" data-id="' + n.id + '" aria-label="Delete note">×</button>' +
@@ -434,16 +492,54 @@ function renderFolderPicker(note){
   }).join('');
 }
 
-function openEditor(id){
+function gotoMatch(pos){
+  var ta = document.getElementById('textarea');
+  if(currentMatches.length === 0) return;
+  currentMatchPos = ((pos % currentMatches.length) + currentMatches.length) % currentMatches.length;
+  var idx = currentMatches[currentMatchPos];
+  ta.focus();
+  ta.setSelectionRange(idx, idx + currentMatchLen);
+  var upTo = ta.value.slice(0, idx);
+  var lineNum = upTo.split('\n').length - 1;
+  var lineHeight = 28;
+  ta.scrollTop = Math.max(0, lineNum * lineHeight - 80);
+  document.getElementById('matchCount').textContent = (currentMatchPos + 1) + ' of ' + currentMatches.length;
+}
+
+function openEditor(id, jumpQuery){
   activeId = id;
   var note = notes.find(function(n){ return n.id === id; });
-  document.getElementById('textarea').value = note ? note.text : '';
+  var ta = document.getElementById('textarea');
+  ta.value = note ? note.text : '';
   document.getElementById('status').textContent = '';
   renderFolderPicker(note || {folder:null});
   document.getElementById('editor').classList.add('open');
-  setTimeout(function(){ document.getElementById('textarea').focus(); }, 200);
+
+  var matchBar = document.getElementById('matchBar');
+  if(jumpQuery && note){
+    currentMatches = allMatchIndices(note.text, jumpQuery);
+    currentMatchLen = jumpQuery.length;
+    currentMatchPos = 0;
+    if(currentMatches.length > 0){
+      matchBar.classList.remove('hidden');
+      setTimeout(function(){ gotoMatch(0); }, 200);
+    } else {
+      matchBar.classList.add('hidden');
+      setTimeout(function(){ ta.focus(); }, 200);
+    }
+  } else {
+    currentMatches = [];
+    matchBar.classList.add('hidden');
+    setTimeout(function(){ ta.focus(); ta.setSelectionRange(0,0); }, 200);
+  }
 }
-function closeEditor(){ document.getElementById('editor').classList.remove('open'); activeId = null; render(); }
+function closeEditor(){
+  document.getElementById('editor').classList.remove('open');
+  document.getElementById('matchBar').classList.add('hidden');
+  currentMatches = [];
+  activeId = null;
+  render();
+}
 
 async function newNote(){
   var folder = (activeTab === 'f1' || activeTab === 'f2') ? activeTab : null;
@@ -522,6 +618,8 @@ document.getElementById('backBtn').addEventListener('click', async function(){
   closeEditor();
 });
 document.getElementById('deleteBtn').addEventListener('click', deleteActive);
+document.getElementById('nextMatch').addEventListener('click', function(){ gotoMatch(currentMatchPos + 1); });
+document.getElementById('prevMatch').addEventListener('click', function(){ gotoMatch(currentMatchPos - 1); });
 document.getElementById('textarea').addEventListener('input', scheduleSave);
 document.getElementById('search').addEventListener('input', render);
 document.getElementById('backupBtn').addEventListener('click', function(){
@@ -566,7 +664,7 @@ document.getElementById('list').addEventListener('click', async function(e){
     return;
   }
   var card = e.target.closest('.note');
-  if(card){ openEditor(card.getAttribute('data-id')); }
+  if(card){ openEditor(card.getAttribute('data-id'), card.getAttribute('data-query') || ''); }
 });
 </script>
 </body>
