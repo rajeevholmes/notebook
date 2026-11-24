@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com 'unsafe-inline'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://api.open-meteo.com https://generativelanguage.googleapis.com; base-uri 'none'; form-action 'self'; object-src 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com 'unsafe-inline'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://api.open-meteo.com; base-uri 'none'; form-action 'self'; object-src 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F7EFC6">
 <meta name="mobile-web-app-capable" content="yes">
@@ -171,53 +171,6 @@
   }
   .authBox .authError{ color: var(--accent); font-size: 13px; margin-bottom: 10px; min-height: 16px; }
   .hidden{ display:none !important; }
-
-  /* Gemini chat */
-  .chatFab{
-    position: fixed; left: 20px; bottom: 24px; width: 56px; height: 56px; border-radius: 50%;
-    background: #2A2A28; color: #FCE38A; border:none; font-size: 24px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 6; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .chatOverlay{
-    position: fixed; inset:0; background: var(--paper);
-    background-image: linear-gradient(var(--paper) 0px, var(--paper) 27px, var(--rule) 28px);
-    background-size: 100% 28px; z-index: 25; display:flex; flex-direction: column;
-    transform: translateY(100%); transition: transform 0.22s ease;
-  }
-  .chatOverlay.open{ transform: translateY(0); }
-  .chatOverlay::before{ content:""; position:absolute; top:0; bottom:0; left:34px; width:2px; background: var(--margin); opacity:0.55; }
-  .chatBar{
-    display:flex; align-items:center; justify-content: space-between; padding: 14px 16px;
-    border-bottom: 1px dashed rgba(42,42,40,0.3); position: relative; z-index:1; background: var(--paper);
-  }
-  .chatBar button{ border:none; background:none; font-family: inherit; font-size: 15px; font-weight: 700; color: var(--accent); padding: 6px 4px; cursor:pointer; }
-  .chatBar .title{ font-weight:700; text-transform:uppercase; letter-spacing:1px; font-size:14px; }
-  .chatMessages{ flex:1; overflow-y:auto; padding: 12px 16px 12px 46px; position:relative; z-index:1; }
-  .chatMsg{ margin-bottom: 14px; max-width: 90%; }
-  .chatMsg.user{ margin-left: auto; text-align:right; }
-  .chatMsg .bubble{
-    display:inline-block; padding: 8px 12px; border-radius: 8px; font-size: 15px; line-height:22px;
-    text-align:left; white-space: pre-wrap;
-  }
-  .chatMsg.user .bubble{ background: var(--accent); color:#fff; }
-  .chatMsg.model .bubble{ background: rgba(255,255,255,0.6); border: 1px solid rgba(42,42,40,0.2); }
-  .chatMsg .who{ font-size:11px; color: var(--ink-soft); margin-bottom:3px; }
-  .chatInputBar{
-    display:flex; gap:8px; padding: 10px 16px 16px 46px; position:relative; z-index:1;
-    background: var(--paper); border-top: 1px dashed rgba(42,42,40,0.3);
-  }
-  .chatInputBar textarea{
-    flex:1; font-family: inherit; font-size: 15px; padding: 10px 12px; border-radius: 8px;
-    border: 1px solid rgba(42,42,40,0.35); background: rgba(255,255,255,0.6); resize:none;
-    min-height: 44px; max-height: 120px; outline:none;
-  }
-  .chatInputBar button{
-    font-family: inherit; font-weight:700; font-size: 14px; padding: 0 16px; border:none;
-    border-radius: 8px; background: var(--accent); color:#fff; cursor:pointer;
-  }
-  .chatInputBar button:disabled{ opacity:0.5; }
-  .chatTyping{ font-size:12px; color: var(--ink-soft); padding: 0 16px 8px 46px; }
 </style>
 </head>
 <body>
@@ -254,26 +207,6 @@
   <main id="list"></main>
 
   <button class="fab" id="newBtn" aria-label="New note">+</button>
-  <button class="chatFab" id="chatFabBtn" aria-label="Open chat">💬</button>
-
-  <div class="chatOverlay" id="chatOverlay">
-    <div class="chatBar">
-      <button id="chatBackBtn">‹ Back</button>
-      <span class="title">Chat</span>
-      <span>
-        <button id="chatKeyBtn">Key</button>
-        <button id="chatClearBtn">Clear</button>
-      </span>
-    </div>
-    <div class="chatMessages" id="chatMessages">
-      <div class="chatMsg model"><div class="who">Gemini</div><div class="bubble">Hi — ask me anything.</div></div>
-    </div>
-    <div class="chatTyping hidden" id="chatTyping">Thinking…</div>
-    <div class="chatInputBar">
-      <textarea id="chatInput" placeholder="Type a message…" rows="1"></textarea>
-      <button id="chatSendBtn">Send</button>
-    </div>
-  </div>
 
   <div class="editorOverlay" id="editor">
     <div class="editorBar">
@@ -315,12 +248,6 @@ const firebaseConfig = {
   messagingSenderId: "798177259852",
   appId: "1:798177259852:web:f07275d6376ee438cddfe9"
 };
-
-// No API key is hardcoded here on purpose: a key committed to a public repo
-// gets scraped and disabled within minutes. Each browser stores its own key
-// locally (never sent anywhere but Google's API and never committed to git).
-const GEMINI_MODEL = "gemini-2.5-flash";
-function getGeminiKey(){ return localStorage.getItem('geminiApiKey') || ''; }
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -812,99 +739,6 @@ document.getElementById('list').addEventListener('click', async function(e){
   if(card){ openEditor(card.getAttribute('data-id'), card.getAttribute('data-query') || ''); }
 });
 
-// ---------- Gemini chat ----------
-var chatHistory = []; // {role: 'user'|'model', text: string}
-
-function renderChat(){
-  var wrap = document.getElementById('chatMessages');
-  wrap.innerHTML = chatHistory.map(function(m){
-    return '<div class="chatMsg ' + (m.role === 'user' ? 'user' : 'model') + '">' +
-      '<div class="who">' + (m.role === 'user' ? 'You' : 'Gemini') + '</div>' +
-      '<div class="bubble">' + escapeHtml(m.text) + '</div>' +
-    '</div>';
-  }).join('') || '<div class="chatMsg model"><div class="who">Gemini</div><div class="bubble">Hi — ask me anything.</div></div>';
-  wrap.scrollTop = wrap.scrollHeight;
-}
-
-async function sendChatMessage(){
-  var input = document.getElementById('chatInput');
-  var text = input.value.trim();
-  if(!text) return;
-  chatHistory.push({role:'user', text: text});
-  input.value = '';
-  input.style.height = 'auto';
-  renderChat();
-
-  var sendBtn = document.getElementById('chatSendBtn');
-  var typing = document.getElementById('chatTyping');
-
-  var key = getGeminiKey();
-  if(!key){
-    chatHistory.push({role:'model', text: 'No Gemini key set for this browser yet — tap "Key" above to add one.'});
-    renderChat();
-    return;
-  }
-
-  sendBtn.disabled = true;
-  typing.classList.remove('hidden');
-
-  try{
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + key;
-    var body = {
-      contents: chatHistory.map(function(m){
-        return { role: m.role, parts: [{ text: m.text }] };
-      })
-    };
-    var response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    var json = await response.json();
-    if(!response.ok){
-      throw new Error((json.error && json.error.message) || 'Request failed');
-    }
-    var reply = json.candidates && json.candidates[0] && json.candidates[0].content &&
-                json.candidates[0].content.parts && json.candidates[0].content.parts[0] &&
-                json.candidates[0].content.parts[0].text;
-    chatHistory.push({role:'model', text: reply || "Sorry, I didn't get a response."});
-  }catch(e){
-    chatHistory.push({role:'model', text: 'Something went wrong reaching Gemini: ' + e.message});
-  }
-
-  sendBtn.disabled = false;
-  typing.classList.add('hidden');
-  renderChat();
-}
-
-document.getElementById('chatFabBtn').addEventListener('click', function(){
-  document.getElementById('chatOverlay').classList.add('open');
-  renderChat();
-  setTimeout(function(){ document.getElementById('chatInput').focus(); }, 150);
-});
-document.getElementById('chatBackBtn').addEventListener('click', function(){
-  document.getElementById('chatOverlay').classList.remove('open');
-});
-document.getElementById('chatKeyBtn').addEventListener('click', function(){
-  var current = getGeminiKey();
-  var entered = prompt('Paste your Gemini API key (stored only in this browser, never uploaded):', current);
-  if(entered === null) return;
-  entered = entered.trim();
-  if(entered) localStorage.setItem('geminiApiKey', entered);
-  else localStorage.removeItem('geminiApiKey');
-  toast(entered ? 'Key saved to this browser' : 'Key cleared');
-});
-document.getElementById('chatClearBtn').addEventListener('click', function(){
-  if(confirm('Clear this chat?')){ chatHistory = []; renderChat(); }
-});
-document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
-document.getElementById('chatInput').addEventListener('keydown', function(e){
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendChatMessage(); }
-});
-document.getElementById('chatInput').addEventListener('input', function(){
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-});
 </script>
 </body>
 </html>
