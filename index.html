@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com 'unsafe-inline'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://api.open-meteo.com https://generativelanguage.googleapis.com; base-uri 'none'; form-action 'self'; object-src 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F7EFC6">
 <meta name="mobile-web-app-capable" content="yes">
@@ -259,7 +260,10 @@
     <div class="chatBar">
       <button id="chatBackBtn">‹ Back</button>
       <span class="title">Chat</span>
-      <button id="chatClearBtn">Clear</button>
+      <span>
+        <button id="chatKeyBtn">Key</button>
+        <button id="chatClearBtn">Clear</button>
+      </span>
     </div>
     <div class="chatMessages" id="chatMessages">
       <div class="chatMsg model"><div class="who">Gemini</div><div class="bubble">Hi — ask me anything.</div></div>
@@ -312,8 +316,11 @@ const firebaseConfig = {
   appId: "1:798177259852:web:f07275d6376ee438cddfe9"
 };
 
-const GEMINI_API_KEY = "AIzaSyAhSuTcSNyia5T5OqZiZRVPecSg8YQk9yU";
+// No API key is hardcoded here on purpose: a key committed to a public repo
+// gets scraped and disabled within minutes. Each browser stores its own key
+// locally (never sent anywhere but Google's API and never committed to git).
 const GEMINI_MODEL = "gemini-2.5-flash";
+function getGeminiKey(){ return localStorage.getItem('geminiApiKey') || ''; }
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -575,14 +582,15 @@ function render(){
     var lines = matchingLines(n.text, q);
     var snipHtml = lines.map(function(l){ return '<div class="snippet">' + highlight(l, q) + '</div>'; }).join('');
     var tagLabel = n.folder ? folders[n.folder] : null;
+    var safeId = escapeHtml(n.id);
     return '' +
-      '<div class="note" data-id="' + n.id + '" data-query="' + escapeHtml(q) + '">' +
+      '<div class="note" data-id="' + safeId + '" data-query="' + escapeHtml(q) + '">' +
         '<div class="body">' +
           '<div class="title">' + title + '</div>' +
           snipHtml +
           '<div class="meta"><span>' + fmtDate(n.updatedAt) + '</span>' + (tagLabel ? '<span class="tag">' + escapeHtml(tagLabel) + '</span>' : '') + '</div>' +
         '</div>' +
-        '<button class="del" data-id="' + n.id + '" aria-label="Delete note">×</button>' +
+        '<button class="del" data-id="' + safeId + '" aria-label="Delete note">×</button>' +
       '</div>';
   }).join('');
 }
@@ -692,6 +700,28 @@ function exportBackup(){
   toast('Backup file downloaded');
 }
 
+// Firestore caps a single batch at 500 writes; chunk comfortably under that.
+var BATCH_LIMIT = 450;
+async function commitInChunks(db, refsAndOps){
+  for(var i = 0; i < refsAndOps.length; i += BATCH_LIMIT){
+    var chunk = refsAndOps.slice(i, i + BATCH_LIMIT);
+    var b = writeBatch(db);
+    chunk.forEach(function(op){ op(b); });
+    await b.commit();
+  }
+}
+
+// Only accept a plain string, trimmed and length-capped, from untrusted backup data.
+function cleanString(v, maxLen){
+  return (typeof v === 'string' ? v : '').slice(0, maxLen || 200000);
+}
+function cleanFolder(v){
+  return (v === 'f1' || v === 'f2') ? v : null;
+}
+function cleanTimestamp(v){
+  return (typeof v === 'number' && isFinite(v)) ? v : Date.now();
+}
+
 async function importBackup(file){
   var reader = new FileReader();
   reader.onload = async function(){
@@ -699,17 +729,28 @@ async function importBackup(file){
       var data = JSON.parse(reader.result);
       if(!data || !Array.isArray(data.notes)) throw new Error('bad file');
       if(!confirm('Replace all current notes with this backup? This cannot be undone.')) return;
+
       var existing = await getDocs(notesCol());
-      var batch1 = writeBatch(db);
-      existing.docs.forEach(function(d){ batch1.delete(d.ref); });
-      await batch1.commit();
-      var batch2 = writeBatch(db);
-      data.notes.forEach(function(n){
+      await commitInChunks(db, existing.docs.map(function(d){
+        return function(b){ b.delete(d.ref); };
+      }));
+
+      await commitInChunks(db, data.notes.map(function(n){
         var ref = doc(notesCol());
-        batch2.set(ref, { text: n.text || '', folder: n.folder || null, updatedAt: n.updatedAt || Date.now() });
-      });
-      await batch2.commit();
-      if(data.folders) await setDoc(foldersDoc(), data.folders);
+        var clean = {
+          text: cleanString(n && n.text, 200000),
+          folder: cleanFolder(n && n.folder),
+          updatedAt: cleanTimestamp(n && n.updatedAt)
+        };
+        return function(b){ b.set(ref, clean); };
+      }));
+
+      if(data.folders && typeof data.folders === 'object'){
+        await setDoc(foldersDoc(), {
+          f1: cleanString(data.folders.f1, 60) || 'Folder 1',
+          f2: cleanString(data.folders.f2, 60) || 'Folder 2'
+        });
+      }
       toast('Backup restored');
     }catch(e){ toast('Could not read that file'); }
   };
@@ -796,11 +837,19 @@ async function sendChatMessage(){
 
   var sendBtn = document.getElementById('chatSendBtn');
   var typing = document.getElementById('chatTyping');
+
+  var key = getGeminiKey();
+  if(!key){
+    chatHistory.push({role:'model', text: 'No Gemini key set for this browser yet — tap "Key" above to add one.'});
+    renderChat();
+    return;
+  }
+
   sendBtn.disabled = true;
   typing.classList.remove('hidden');
 
   try{
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + GEMINI_API_KEY;
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + key;
     var body = {
       contents: chatHistory.map(function(m){
         return { role: m.role, parts: [{ text: m.text }] };
@@ -835,6 +884,15 @@ document.getElementById('chatFabBtn').addEventListener('click', function(){
 });
 document.getElementById('chatBackBtn').addEventListener('click', function(){
   document.getElementById('chatOverlay').classList.remove('open');
+});
+document.getElementById('chatKeyBtn').addEventListener('click', function(){
+  var current = getGeminiKey();
+  var entered = prompt('Paste your Gemini API key (stored only in this browser, never uploaded):', current);
+  if(entered === null) return;
+  entered = entered.trim();
+  if(entered) localStorage.setItem('geminiApiKey', entered);
+  else localStorage.removeItem('geminiApiKey');
+  toast(entered ? 'Key saved to this browser' : 'Key cleared');
 });
 document.getElementById('chatClearBtn').addEventListener('click', function(){
   if(confirm('Clear this chat?')){ chatHistory = []; renderChat(); }
